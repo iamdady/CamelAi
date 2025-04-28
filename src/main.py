@@ -82,46 +82,48 @@ async def chat_command(
     max_tokens: Optional[int] = 512,
 ):
     try:
-        # Only allow in text channels
+        # only support creating thread in text channel
         if not isinstance(int.channel, discord.TextChannel):
             return
 
-        # Block servers not allowed
+        # block servers not in allow list
         if should_block(guild=int.guild):
-            return
-
-        # Only allow usage in specific channels
-        ALLOWED_CHANNEL_IDS = [1276206584988434617]  # <- replace with your #gen-chat channel ID
-        if int.channel_id not in ALLOWED_CHANNEL_IDS:
-            embed = discord.Embed(
-                title="🚫 Wrong Channel",
-                description="Please use this command in <#123456789012345678> only!",
-                color=discord.Color.red()
-            )
-            await int.response.send_message(embed=embed, ephemeral=True)
             return
 
         user = int.user
         logger.info(f"Chat command by {user} {message[:20]}")
 
-        # Check valid temperature
+        # Check for valid temperature
         if temperature is not None and (temperature < 0 or temperature > 1):
             await int.response.send_message(
-                f"You supplied an invalid temperature: {temperature}. Must be between 0 and 1.",
+                f"You supplied an invalid temperature: {temperature}. Temperature must be between 0 and 1.",
                 ephemeral=True,
             )
             return
 
-        # Check valid max_tokens
+        # Check for valid max_tokens
         if max_tokens is not None and (max_tokens < 1 or max_tokens > 4096):
             await int.response.send_message(
-                f"You supplied an invalid max_tokens: {max_tokens}. Must be between 1 and 4096.",
+                f"You supplied an invalid max_tokens: {max_tokens}. Max tokens must be between 1 and 4096.",
                 ephemeral=True,
             )
             return
 
+        # Check if user already has an active thread
+        for thread_channel in int.channel.threads:
+            if (not thread_channel.archived 
+                and not thread_channel.locked
+                and thread_channel.owner_id == client.user.id 
+                and thread_channel.name.startswith(ACTIVATE_THREAD_PREFX)
+                and thread_channel.created_at and thread_channel.created_at.user.id == user.id):
+                await int.response.send_message(
+                    f"You already have an open thread: {thread_channel.mention}. Please close it before starting a new one.",
+                    ephemeral=True,
+                )
+                return
+
         try:
-            # Moderate first
+            # moderate the message
             flagged_str, blocked_str = moderate_message(message=message, user=user)
             await send_moderation_blocked_message(
                 guild=int.guild,
@@ -159,7 +161,6 @@ async def chat_command(
                 message=message,
                 url=response.jump_url,
             )
-
         except Exception as e:
             logger.exception(e)
             await int.response.send_message(
@@ -167,11 +168,11 @@ async def chat_command(
             )
             return
 
-        # Create the thread
+        # create the private thread
         thread = await response.create_thread(
             name=f"{ACTIVATE_THREAD_PREFX} {user.name[:20]} - {message[:30]}",
             type=discord.ChannelType.private_thread,
-            slowmode_delay=20,
+            slowmode_delay=20,  # 20 second cooldown between messages
             reason="gpt-bot",
             auto_archive_duration=60,
         )
@@ -180,7 +181,6 @@ async def chat_command(
         )
 
         async with thread.typing():
-            # First completion
             messages = [Message(user=user.name, text=message)]
             response_data = await generate_completion_response(
                 messages=messages, user=user, thread_config=thread_data[thread.id]
