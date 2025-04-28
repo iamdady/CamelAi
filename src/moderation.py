@@ -26,7 +26,7 @@ def moderate_message(
     blocked_str = ""
     flagged_str = ""
     for category, score in category_score_items.items():
-        if score > MODERATION_VALUES_FOR_BLOCKED.get(category, 1.0):
+        if score is not None and score > MODERATION_VALUES_FOR_BLOCKED.get(category, 1.0):
             blocked_str += f"({category}: {score})"
             logger.info(f"blocked {user} {category} {score}")
             break
