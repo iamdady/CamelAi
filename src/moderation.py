@@ -17,23 +17,24 @@ def moderate_message(
     message: str, user: str
 ) -> Tuple[str, str]:  # [flagged_str, blocked_str]
     moderation_response = client.moderations.create(
-    input=message, model="text-moderation-latest"
-)
-category_scores = moderation_response.results[0].category_scores
+        input=message, model="text-moderation-latest"
+    )
+    category_scores = moderation_response.results[0].category_scores
 
-category_score_items = category_scores.model_dump()
+    category_score_items = dict(category_scores)  # <--- THIS LINE
 
-blocked_str = ""
-flagged_str = ""
-for category, score in category_score_items.items():
-    if score is not None and score > MODERATION_VALUES_FOR_BLOCKED.get(category, 1.0):
-        blocked_str += f"({category}: {score})"
-        logger.info(f"blocked {user} {category} {score}")
-        break
-    if score is not None and score > MODERATION_VALUES_FOR_FLAGGED.get(category, 1.0):
-        flagged_str += f"({category}: {score})"
-        logger.info(f"flagged {user} {category} {score}")
-return (flagged_str, blocked_str)
+    blocked_str = ""
+    flagged_str = ""
+    for category, score in category_score_items.items():
+        if score is not None and score > MODERATION_VALUES_FOR_BLOCKED.get(category, 1.0):
+            blocked_str += f"({category}: {score})"
+            logger.info(f"blocked {user} {category} {score}")
+            break
+        if score is not None and score > MODERATION_VALUES_FOR_FLAGGED.get(category, 1.0):
+            flagged_str += f"({category}: {score})"
+            logger.info(f"flagged {user} {category} {score}")
+
+    return (flagged_str, blocked_str)
 
 
 async def fetch_moderation_channel(
