@@ -19,7 +19,7 @@ def moderate_message(
     moderation_response = client.moderations.create(
         input=message, model="text-moderation-latest"
     )
-    category_scores = moderation_response.results[0].category_scores or {}
+    category_scores = moderation_response.results[0].category_scores.dict()
 
     blocked_str = ""
     flagged_str = ""
