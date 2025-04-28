@@ -21,11 +21,10 @@ def moderate_message(
     )
     category_scores = moderation_response.results[0].category_scores or {}
 
-    category_score_items = model_dump(category_scores)
-
     blocked_str = ""
     flagged_str = ""
-    for category, score in category_score_items.items():
+
+    for category, score in category_scores.items():
         if score is not None and score > MODERATION_VALUES_FOR_BLOCKED.get(category, 1.0):
             blocked_str += f"({category}: {score})"
             logger.info(f"blocked {user} {category} {score}")
