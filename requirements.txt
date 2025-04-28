@@ -1,5 +1,5 @@
 discord.py==2.1.*
 python-dotenv==0.21.*
 openai>=1.25.0
-PyYAML==6.0
+PyYAML==5.4.1
 dacite==1.6.*
