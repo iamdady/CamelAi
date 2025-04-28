@@ -194,10 +194,13 @@ async def chat_command(
         )
 
 
-# calls for each message
 @client.event
 async def on_message(message: DiscordMessage):
     try:
+        # Ignore non-text messages (attachments, images, mp3s, etc)
+        if not message.content or message.content.strip() == "":
+            return
+
         # Ignore stuff we don't want
         if should_block(guild=message.guild):
             return
