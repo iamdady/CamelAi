@@ -13,7 +13,7 @@ from src.constants import (
     BOT_INVITE_URL,
     DISCORD_BOT_TOKEN,
     EXAMPLE_CONVOS,
-    MAX_MESSAGES,
+    MAX_THREAD_MESSAGES,  # Using MAX_THREAD_MESSAGES instead of MAX_MESSAGES
     SECONDS_DELAY_RECEIVING_MSG,
     AVAILABLE_MODELS,
     DEFAULT_MODEL,
@@ -381,7 +381,7 @@ async def on_message(message: DiscordMessage):
         # Collect message history
         channel_messages = [
             discord_message_to_message(m)
-            async for m in message.channel.history(limit=MAX_MESSAGES)
+            async for m in message.channel.history(limit=MAX_THREAD_MESSAGES)  # Using MAX_THREAD_MESSAGES instead of MAX_MESSAGES
         ]
         channel_messages = [x for x in channel_messages if x is not None]
         channel_messages.reverse()
