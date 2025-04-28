@@ -82,35 +82,46 @@ async def chat_command(
     max_tokens: Optional[int] = 512,
 ):
     try:
-        # only support creating thread in text channel
+        # Only allow in text channels
         if not isinstance(int.channel, discord.TextChannel):
             return
 
-        # block servers not in allow list
+        # Block servers not allowed
         if should_block(guild=int.guild):
+            return
+
+        # Only allow usage in specific channels
+        ALLOWED_CHANNEL_IDS = [1276206584988434617]  # <- replace with your #gen-chat channel ID
+        if int.channel_id not in ALLOWED_CHANNEL_IDS:
+            embed = discord.Embed(
+                title="🚫 Wrong Channel",
+                description="Please use this command in <#123456789012345678> only!",
+                color=discord.Color.red()
+            )
+            await int.response.send_message(embed=embed, ephemeral=True)
             return
 
         user = int.user
         logger.info(f"Chat command by {user} {message[:20]}")
 
-        # Check for valid temperature
+        # Check valid temperature
         if temperature is not None and (temperature < 0 or temperature > 1):
             await int.response.send_message(
-                f"You supplied an invalid temperature: {temperature}. Temperature must be between 0 and 1.",
+                f"You supplied an invalid temperature: {temperature}. Must be between 0 and 1.",
                 ephemeral=True,
             )
             return
 
-        # Check for valid max_tokens
+        # Check valid max_tokens
         if max_tokens is not None and (max_tokens < 1 or max_tokens > 4096):
             await int.response.send_message(
-                f"You supplied an invalid max_tokens: {max_tokens}. Max tokens must be between 1 and 4096.",
+                f"You supplied an invalid max_tokens: {max_tokens}. Must be between 1 and 4096.",
                 ephemeral=True,
             )
             return
 
         try:
-            # moderate the message
+            # Moderate first
             flagged_str, blocked_str = moderate_message(message=message, user=user)
             await send_moderation_blocked_message(
                 guild=int.guild,
@@ -119,7 +130,6 @@ async def chat_command(
                 message=message,
             )
             if len(blocked_str) > 0:
-                # message was blocked
                 await int.response.send_message(
                     f"Your prompt has been blocked by moderation.\n{message}",
                     ephemeral=True,
@@ -136,7 +146,6 @@ async def chat_command(
             embed.add_field(name=user.name, value=message)
 
             if len(flagged_str) > 0:
-                # message was flagged
                 embed.color = discord.Color.yellow()
                 embed.title = "⚠️ This prompt was flagged by moderation."
 
@@ -150,6 +159,7 @@ async def chat_command(
                 message=message,
                 url=response.jump_url,
             )
+
         except Exception as e:
             logger.exception(e)
             await int.response.send_message(
@@ -157,7 +167,7 @@ async def chat_command(
             )
             return
 
-        # create the thread
+        # Create the thread
         thread = await response.create_thread(
             name=f"{ACTIVATE_THREAD_PREFX} {user.name[:20]} - {message[:30]}",
             slowmode_delay=1,
@@ -167,13 +177,13 @@ async def chat_command(
         thread_data[thread.id] = ThreadConfig(
             model=model, max_tokens=max_tokens, temperature=temperature
         )
+
         async with thread.typing():
-            # fetch completion
+            # First completion
             messages = [Message(user=user.name, text=message)]
             response_data = await generate_completion_response(
                 messages=messages, user=user, thread_config=thread_data[thread.id]
             )
-            # send the result
             await process_response(
                 user=user, thread=thread, response_data=response_data
             )
