@@ -206,17 +206,15 @@ async def on_message(message: DiscordMessage):
         if thread.owner_id != client.user.id:
             return
 
-        # ignore threads that are archived locked or title is not what we want
+        # ignore threads that are archived, locked, or title is not what we want
         if (
             thread.archived
             or thread.locked
             or not thread.name.startswith(ACTIVATE_THREAD_PREFX)
         ):
-            # ignore this thread
             return
 
         if thread.message_count > MAX_THREAD_MESSAGES:
-            # too many messages, no longer going to reply
             await close_thread(thread=thread)
             return
 
@@ -248,6 +246,7 @@ async def on_message(message: DiscordMessage):
                     )
                 )
                 return
+
         await send_moderation_flagged_message(
             guild=message.guild,
             user=message.author,
@@ -271,7 +270,6 @@ async def on_message(message: DiscordMessage):
                 last_message=thread.last_message,
                 bot_id=client.user.id,
             ):
-                # there is another message, so ignore this one
                 return
 
         logger.info(
@@ -285,12 +283,22 @@ async def on_message(message: DiscordMessage):
         channel_messages = [x for x in channel_messages if x is not None]
         channel_messages.reverse()
 
+        # 🔥 FIX: safely get or create thread config
+        thread_config = thread_data.get(thread.id)
+        if thread_config is None:
+            thread_config = ThreadConfig(
+                model=DEFAULT_MODEL,
+                temperature=0.5,
+                max_tokens=1000,
+            )
+            thread_data[thread.id] = thread_config
+
         # generate the response
         async with thread.typing():
             response_data = await generate_completion_response(
                 messages=channel_messages,
                 user=message.author,
-                thread_config=thread_data[thread.id],
+                thread_config=thread_config,
             )
 
         if is_last_message_stale(
@@ -298,7 +306,6 @@ async def on_message(message: DiscordMessage):
             last_message=thread.last_message,
             bot_id=client.user.id,
         ):
-            # there is another message and its not from us, so ignore this response
             return
 
         # send response
@@ -307,6 +314,5 @@ async def on_message(message: DiscordMessage):
         )
     except Exception as e:
         logger.exception(e)
-
 
 client.run(DISCORD_BOT_TOKEN)
