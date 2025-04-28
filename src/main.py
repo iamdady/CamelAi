@@ -188,37 +188,23 @@ async def chat_command(
 @client.event
 async def on_message(message: DiscordMessage):
     try:
-        # block servers not in allow list
+        # Ignore stuff we don't want
         if should_block(guild=message.guild):
             return
-
-        # ignore messages from the bot
         if message.author == client.user:
             return
-
-        # ignore messages not in a thread
-        channel = message.channel
-        if not isinstance(channel, discord.Thread):
+        if not isinstance(message.channel, discord.Thread):
             return
-
-        # ignore threads not created by the bot
-        thread = channel
+        thread = message.channel
         if thread.owner_id != client.user.id:
             return
-
-        # ignore threads that are archived, locked, or title is not what we want
-        if (
-            thread.archived
-            or thread.locked
-            or not thread.name.startswith(ACTIVATE_THREAD_PREFX)
-        ):
+        if thread.archived or thread.locked or not thread.name.startswith(ACTIVATE_THREAD_PREFX):
             return
-
         if thread.message_count > MAX_THREAD_MESSAGES:
-            await close_thread(thread=thread)
+            await close_thread(thread)
             return
 
-        # moderate the message
+        # MODERATION check first
         flagged_str, blocked_str = moderate_message(
             message=message.content, user=message.author
         )
@@ -238,80 +224,51 @@ async def on_message(message: DiscordMessage):
                     )
                 )
                 return
-            except Exception as e:
+            except Exception:
                 await thread.send(
                     embed=discord.Embed(
-                        description=f"❌ **{message.author}'s message has been blocked by moderation but could not be deleted. Missing Manage Messages permission in this Channel.**",
+                        description=f"❌ **{message.author}'s message has been blocked by moderation but could not be deleted.**",
                         color=discord.Color.red(),
                     )
                 )
                 return
+        
+        # Wait to catch multiple user messages
+        await asyncio.sleep(SECONDS_DELAY_RECEIVING_MSG)
 
-        await send_moderation_flagged_message(
-            guild=message.guild,
-            user=message.author,
-            flagged_str=flagged_str,
-            message=message.content,
-            url=message.jump_url,
-        )
-        if len(flagged_str) > 0:
-            await thread.send(
-                embed=discord.Embed(
-                    description=f"⚠️ **{message.author}'s message has been flagged by moderation.**",
-                    color=discord.Color.yellow(),
-                )
-            )
-
-        # wait a bit in case user has more messages
-        if SECONDS_DELAY_RECEIVING_MSG > 0:
-            await asyncio.sleep(SECONDS_DELAY_RECEIVING_MSG)
-            if is_last_message_stale(
-                interaction_message=message,
-                last_message=thread.last_message,
-                bot_id=client.user.id,
-            ):
-                return
-
-        logger.info(
-            f"Thread message to process - {message.author}: {message.content[:50]} - {thread.name} {thread.jump_url}"
-        )
-
-        channel_messages = [
-            discord_message_to_message(message)
-            async for message in thread.history(limit=MAX_THREAD_MESSAGES)
-        ]
-        channel_messages = [x for x in channel_messages if x is not None]
-        channel_messages.reverse()
-
-        # 🔥 FIX: safely get or create thread config
-        thread_config = thread_data.get(thread.id)
-        if thread_config is None:
-            thread_config = ThreadConfig(
-                model=DEFAULT_MODEL,
-                temperature=0.5,
-                max_tokens=1000,
-            )
-            thread_data[thread.id] = thread_config
-
-        # generate the response
-        async with thread.typing():
-            response_data = await generate_completion_response(
-                messages=channel_messages,
-                user=message.author,
-                thread_config=thread_config,
-            )
-
+        # Check if this message is still the last one
         if is_last_message_stale(
             interaction_message=message,
             last_message=thread.last_message,
             bot_id=client.user.id,
         ):
-            return
-
-        # send response
-        await process_response(
-            user=message.author, thread=thread, response_data=response_data
+            return  # Ignore, not last message anymore
+        
+        logger.info(
+            f"Thread message to process - {message.author}: {message.content[:50]} - {thread.name} {thread.jump_url}"
         )
+
+        # Actually generate response
+        channel_messages = [
+            discord_message_to_message(m)
+            async for m in thread.history(limit=MAX_THREAD_MESSAGES)
+        ]
+        channel_messages = [x for x in channel_messages if x is not None]
+        channel_messages.reverse()
+
+        async with thread.typing():
+            response_data = await generate_completion_response(
+                messages=channel_messages,
+                user=message.author,
+                thread_config=thread_data[thread.id],
+            )
+
+        await process_response(
+            user=message.author,
+            thread=thread,
+            response_data=response_data
+        )
+        
     except Exception as e:
         logger.exception(e)
 
