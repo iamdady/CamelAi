@@ -42,7 +42,7 @@ AI_CHATS_CATEGORY_ID = 1366330359805116547
 CHANNEL_PREFIX = "ai-chat-"
 INACTIVITY_REMINDER_MINUTES = 15
 INACTIVITY_CLOSE_MINUTES = 30
-REMINDER_MESSAGE = "{user.mention}, this AI chat will close automatically if no activity happens in the next 15 minutes!"
+REMINDER_MESSAGE = "{user.mention}, this AI chat will close automatically if no activity happens in the next 15 minutes! You can also close this chat by typing /close."
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -405,6 +405,24 @@ async def on_message(message: DiscordMessage):
 
     except Exception as e:
         logger.exception(e)
+        
+@tree.command(name="close", description="Close this AI chat channel")
+async def close(interaction: discord.Interaction):
+    channel = interaction.channel
+    if isinstance(channel, discord.TextChannel):
+        if channel.id in channel_data:
+            try:
+                await interaction.response.send_message("Closing this chat...", ephemeral=True)
+                await channel.delete(reason="Closed by user via /close")
+                del channel_data[channel.id]
+            except Exception as e:
+                logger.error(f"Error deleting channel {channel.id}: {e}")
+                await interaction.response.send_message("Failed to delete channel.", ephemeral=True)
+        else:
+            await interaction.response.send_message("This is not a managed AI chat channel.", ephemeral=True)
+    else:
+        await interaction.response.send_message("This command can only be used in a text channel.", ephemeral=True)
+
 
 
 client.run(DISCORD_BOT_TOKEN)
